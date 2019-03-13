@@ -16,16 +16,24 @@ DATA_PATH = "../UCLA_data/CSC4.Ncs"
 N_CLUS = 3
 
 # Window of time (in seconds) to plot some samples of spikes.
-T_MIN_MAX = [0, 3]
+T_MIN_MAX = (0, 3)
 
 ########
 # MAIN #
 ########
 
+
+
+
 def spike_sort(data_path=DATA_PATH, n_clus=N_CLUS, t_min_max=T_MIN_MAX):
     """
     First draft of the pipeline use to cluster signal amplitude into the
     different spikes that initiated it.    
+    
+    :param data_path: path of your ncs file.
+    :param n_clus: number of cluster to be set manually for now.
+    :param t_min_max: tuple containing the the range of data to be plotted.
+
     """
     ### Load ncs data and return the raw data, the sampling frequency,
     ### the amplitude, and the time vector.
@@ -39,10 +47,10 @@ def spike_sort(data_path=DATA_PATH, n_clus=N_CLUS, t_min_max=T_MIN_MAX):
     pos, wave_form = hf.extract_spikes(filtered_amp)
 
     ### Extract features from spikes and cluster them.
-    features = hf.feature_extraction_0(wave_form, n_clus=n_clus)
+    features = hf.cluster_pca_kmeans(wave_form, n_clus=n_clus)
 
     ### Plot the cluster map and their average wave form.
-    hf.plot_features(wave_form, sf, features)
+    hf.plot_features_cluster(wave_form, sf, features)
 
     ### Plot the raw signal and the filtered signal between time
     ### 'T_MIN_MAX[0]' and 'T_MIN_MAX[1]'.

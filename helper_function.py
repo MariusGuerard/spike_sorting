@@ -20,14 +20,29 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 
 
+
+#######################
+# LOADING AND PARSING #
+#######################
+
 def load_ncs(data_path):
-    """
-    Load data from Neuralynx (by Carsten Klein).
+    """Load data from Neuralynx (by Carsten Klein).
+
     Note: The ravel of the data['Samples'] might cause problems because 
     consider that there is no pause between recordings...
     512/sf * 1e6 = 15974 != raw[1][0] - raw[0][0] = 15872 (100 microseconds 
     of difference is not much though so it might be negligible).
-    """
+
+    Args:
+        data_path (str): location of the ncs file.
+
+    Returns:
+        ndarray: The raw data
+        uint32: the sampling frequency
+        ndarray: the signal amplitude
+        ndarray: the time vector
+    
+     """
     # Header has 16 kilobytes length.
     HEADER_SIZE = 16 * 1024
     # Open file.
@@ -57,14 +72,20 @@ def load_ncs(data_path):
     return raw, sf, data, time_vec
 
 
-
 ###########################
 # VISUALIZATION FUNCTIONS #
 ###########################
-
+     
 def plot_amplitude(time_vec, data_vec, sf, t_min=0, t_max=1):
-    """
-    Plot voltage amplitude between t_min seconds and t_max seconds.
+    """Plot voltage amplitude between t_min seconds and t_max seconds.
+
+    Args:
+        time_vec (ndarray): time vector
+        data_vec (ndarray): data to plot.
+        sf (uint32): sampling frequency
+        t_min (uint): start of x axis (default 0)
+        t_max (uint): end of x axis (default 1)
+
     """
     fig, ax = plt.subplots(figsize=(15, 5))
     ax.plot(time_vec[t_min*sf:t_max*sf], data_vec[t_min*sf:t_max*sf])
@@ -72,11 +93,15 @@ def plot_amplitude(time_vec, data_vec, sf, t_min=0, t_max=1):
     ax.set_xlim(time_vec[t_min*sf], time_vec[t_max*sf])
     ax.set_xlabel('time [s]', fontsize=20)
     ax.set_ylabel('amplitude [uV]', fontsize=20)
-    #plt.show()
+
 
 def plot_random_spikes(spike_data, n_spikes=100):
-    """
-    Plot 'n_spikes' random spikes among 'spike_data'
+    """Plot 'n_spikes' random spikes among 'spike_data'.
+
+    Args:
+        spike_data (ndarray): each element contains a spike wave form
+        n_spikes (uint32): number of random spikes to be plotted. (default 100)
+
     """
     np.random.seed(10)
     fig, ax = plt.subplots(figsize=(15, 5))
@@ -85,7 +110,6 @@ def plot_random_spikes(spike_data, n_spikes=100):
         spike = np.random.randint(0, len(spike_data))
         ax.plot(spike_data[spike, :])
 
-    #ax.set_xlim([0, 90])
     ax.set_xlabel('# sample', fontsize=20)
     ax.set_ylabel('amplitude [uV]', fontsize=20)
     ax.set_title('spike waveforms', fontsize=23)
@@ -93,28 +117,46 @@ def plot_random_spikes(spike_data, n_spikes=100):
 
 
 def plot_pca(signal_pca, c_data=None):
+    """Scatter plot the two first columns of signal_pca
+
+    Args:
+        signal_pca (ndarray): the pca to be plotted
+        c_data (ndarray): the color value, 
+        if None, use the 3rd columns of signal_pca (default None)
     """
 
-    """
+    # If no color data are specified use the 3rd columns of signal_pca
+    # (which represent the 3rd principal component).
     try: c_data.shape
-    except: c_data = signal_pca[:,2] 
-    # Plot the 1st principal component aginst the 2nd and use the 3rd for color
+    except: c_data = signal_pca[:,2]
+    
+    # Plot the 1st principal component aginst the 2nd.
     fig, ax = plt.subplots(figsize=(8, 8))
-    # ax.scatter(signal_pca[:, 0], signal_pca[:, 1], c=signal_pca[:, 2])
     ax.scatter(signal_pca[:, 0], signal_pca[:, 1], c=c_data)
     ax.set_xlabel('1st principal component', fontsize=20)
     ax.set_ylabel('2nd principal component', fontsize=20)
-    # ax.set_title('first 3 principal components', fontsize=23)
-
     fig.subplots_adjust(wspace=0.1, hspace=0.1)
-    #plt.legend()
     plt.show()
 
 #############
 # FILTERING #
 #############
 
+
 def pass_band_butter(signal, sf, low_hz=500, high_hz=9000, order=2):
+    """Implement a butter pass_band.
+
+    Args:
+    signal (ndarray): the signal to be filtered.
+    sf (uint32): the sampling frequency.
+    low_hz (the lower bound of the filter in Hz (default 500)
+    high_hz (float): the higher bound of the filter in Hz (default 9000)
+    order (uint): order of the filter. (default 2)
+
+    Returns:
+	ndarray: the filtered signal
+
+    """
     # Nyquist frequency.
     nyq = sf / 2
 
@@ -137,42 +179,55 @@ def pass_band_butter(signal, sf, low_hz=500, high_hz=9000, order=2):
 # SPIKE EXTRACTION #
 ####################
 
-def extract_spikes(data, spike_window=80, tf=5, offset=10, max_thresh=350,
-                   spike_mode='median'):
-    """
-    Extract spike waveforms from the data and align them together.
-    It is probably better to compute threshold with median, but to be verified.
-    """
 
+def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
+                   max_thresh=350, spike_mode="median"):
+    """Extract spike waveforms from the data and align them together.
+    It is probably better to compute threshold with median, but to be verified.
+
+    Args:
+        signal (ndarray): signal containing spikes mixed with noise.
+        spike_window (int): number of acquisition that define a wave_form 
+        (default 80)
+        thresh_coeff (float): ratio between threshold and noise (default 5)
+        offset (int): offset between the spike's maximum and the window center 
+        (default 10)
+        max_thresh (float): high-threshold to remove artifacts (default 350)
+        spike_mode way to compute the threshold from the signal (default "median")
+
+    Returns:
+	list: positions of the spike's maximums
+        list of ndarray: each array contains a spikes' wave form.
+    """
     if spike_mode == 'median':
         # Threshold based on median (see Quiroga 2004).
-        thresh = np.median(np.abs(data)/0.6745) * tf
+        thresh = np.median(np.abs(signal)/0.6745) * thresh_coeff
     else:
-        # Calculate threshold based on data mean.
-        thresh = np.mean(np.abs(data)) * tf
+        # Calculate threshold based on mean.
+        thresh = np.mean(np.abs(signal)) * thresh_coeff
 
     # Find positions wherere the threshold is crossed.
-    pos_vec = np.where(data > thresh)[0]
+    pos_vec = np.where(signal > thresh)[0]
     # Test of which of these position are not too close from start or end.
-    pos_in_simu = (pos_vec > spike_window) * (pos_vec < len(data) - spike_window) 
+    pos_in_simu = (pos_vec > spike_window) * \
+                  (pos_vec < len(signal) - spike_window) 
     # Remove the position that are too close from start or end.
     pos_vec = pos_vec[pos_in_simu]
     
     # Store the position of the maximum of the spike.
     spike_pos = []
     # Store the spike signals centered on the window.
-    wave_form_list = [] #np.zeros(spike_window * 2)
+    wave_form_list = [] 
 
     for pos in pos_vec:
         # signal in the window around where the threshold is crossed.
-        signal_window = data[pos - spike_window:pos + spike_window]
-        # Check if data in window is below upper threshold (artifact filtering).
+        signal_window = signal[pos - spike_window:pos + spike_window]
+        # Check if signal in window is below upper threshold (artifact filtering).
         if signal_window.max() < max_thresh:
             # Find sample with maximum data point in window.
             pos_max = np.argmax(signal_window) + pos
             # Re-center Window on maximum sample.
-            wave_form = data[pos_max - 2*spike_window : pos_max + spike_window]
-
+            wave_form = signal[pos_max - 2*spike_window : pos_max + spike_window]
             # Append data.
             spike_pos.append(pos_max)
             wave_form_list.append(wave_form)
@@ -191,17 +246,26 @@ def extract_spikes(data, spike_window=80, tf=5, offset=10, max_thresh=350,
 
 ### With PCA and k-means clustering.
 
-def feature_extraction_0(signal, pca_dim=12, n_clus=3):
-    """
+def cluster_pca_kmeans(signals, pca_dim=12, n_clus=3):
+    """Perform a PCA for extracting the features from the spikes and then
+    cluster these features using k-means algorithm.
+
+    Args:
+        signals (list of ndarray): contains all the wave_forms to be clustered.
+        pca_dim (int): Number of dimension of the PCA. (default 12)
+        n_clus (int): Number of clusters that gather the spikes. (default 3)
+
+    Returns:
+	(dic): contains the low-dimension signal and the clusters of all spikes.
 
     """
+
     # Apply min-max scaling.
-    # (XXX Should try with standard and robust scaling as well).    
     scaler = sk.preprocessing.MinMaxScaler()
-    signal_norm = scaler.fit_transform(signal)
+    signal_norm = scaler.fit_transform(signals)
     # Dimensionality Reduction.    
     pca = PCA(n_components=pca_dim)
-    signal_pca = pca.fit_transform(signal_norm)
+    signal_pca = pca.fit_transform(signals)
     #hf.plot_pca(wave_pca)
 
     ### K-means clustering.
@@ -212,31 +276,40 @@ def feature_extraction_0(signal, pca_dim=12, n_clus=3):
     
     ### Organize results.
     result = {}
-    result['n_dim_pca'] = pca_dim
+    result['n_dim'] = pca_dim
     result['n_clus'] = n_clus
-    result['pca'] = signal_pca
+    result['low_dim_signal'] = signal_pca
     result['labels'] = signal_labels
     result['cluster_centers'] = cluster_centers
     
     return result
 
-def plot_features(signal, sample_freq, result_extraction):
-    """
+
+
+def plot_features_cluster(signals, sample_freq, result_cluster):
+    """Plot the clusters on the two first dimensions of the low_dimensional
+    signal, also plot the average and std of the wave_forms of all clusters.
+
+    Args:
+        signals (list of ndarray): each arra
+        sample_freq (float): sampling_frequency
+        result_cluster (dic): result from a clusterization function
 
     """
-    n_clus = result_extraction['n_clus']
-    signal_pca = result_extraction['pca']
-    labels = result_extraction['labels']
-    cluster_centers = result_extraction['cluster_centers']
+    ### Extract variables from clusterization result.
+    n_clus = result_cluster['n_clus']
+    low_dim_signal = result_cluster['low_dim_signal']
+    labels = result_cluster['labels']
+    cluster_centers = result_cluster['cluster_centers']
 
-    
-    cluster_mean = [signal[labels==i, :].mean(axis=0) for i in range(n_clus)]
-    cluster_std = [signal[labels==0, :].std(axis=0) for i in range(n_clus)]
+    ### Plot the clusters on the two first dimension of the low dim signal.
+    plot_pca(low_dim_signal, c_data=labels)
 
-    # Plot the result
-    plot_pca(signal_pca, c_data=labels)
+    ### Plot the average wave_form (and std) for each cluster.
+    cluster_mean = [signals[labels==i, :].mean(axis=0) for i in range(n_clus)]
+    cluster_std = [signals[labels==0, :].std(axis=0) for i in range(n_clus)]
 
-    time = np.linspace(0, signal.shape[1]/sample_freq, signal.shape[1])*1000
+    time = np.linspace(0, signals.shape[1]/sample_freq, signals.shape[1])*1000
 
     fig, ax = plt.subplots(figsize=(15, 5))
     for i in range(n_clus):
