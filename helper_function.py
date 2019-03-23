@@ -10,14 +10,27 @@ https://vis.caltech.edu/~rodri/papers/Spike_sorting.pdf
 
 XXX Check energy-efficient algorithms for comparison.
 """
-
 import numpy as np
 from scipy.signal import butter, lfilter
 import matplotlib.pyplot as plt
 plt.ion()
-import sklearn as sk
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
+
+
+########
+# MATH #
+########
+
+# [doc]
+def mad(arr):
+    """ Median Absolute Deviation: a "Robust" version of standard deviation.
+    Indices variabililty of the sample.
+    https://en.wikipedia.org/wiki/Median_absolute_deviation 
+    """
+    # should be faster to not use masked arrays.
+    arr = np.ma.array(arr).compressed() 
+    med = np.median(arr)
+    return np.median(np.abs(arr - med))
+
 
 
 
@@ -128,7 +141,7 @@ def plot_pca(signal_pca, c_data=None):
     # If no color data are specified use the 3rd columns of signal_pca
     # (which represent the 3rd principal component).
     try: c_data.shape
-    except: c_data = signal_pca[:,2]
+    except: c_data = signal_pca[:, 2]
     
     # Plot the 1st principal component aginst the 2nd.
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -138,6 +151,44 @@ def plot_pca(signal_pca, c_data=None):
     fig.subplots_adjust(wspace=0.1, hspace=0.1)
     plt.show()
 
+
+
+def plot_features_cluster(signals, sample_freq, result_cluster):
+    """Plot the clusters on the two first dimensions of the low_dimensional
+    signal, also plot the average and std of the wave_forms of all clusters.
+
+    Args:
+        signals (list of ndarray): each arra
+        sample_freq (float): sampling_frequency
+        result_cluster (dic): result from a clusterization function
+
+    """
+    ### Extract variables from clusterization result.
+    n_clus = result_cluster['n_clus']
+    low_dim_signal = result_cluster['low_dim_signal']
+    labels = result_cluster['labels']
+    #cluster_centers = result_cluster['cluster_centers']
+
+    ### Plot the clusters on the two first dimension of the low dim signal.
+    plot_pca(low_dim_signal, c_data=labels)
+
+    ### Plot the average wave_form (and std) for each cluster.
+    cluster_mean = [signals[labels == i, :].mean(axis=0) for i in range(n_clus)]
+    cluster_std = [signals[labels == 0, :].std(axis=0) for i in range(n_clus)]
+
+    time = np.linspace(0, signals.shape[1]/sample_freq, signals.shape[1])*1000
+
+    fig, ax = plt.subplots(figsize=(15, 5))
+    for i in range(n_clus):
+        clus_mean = cluster_mean[i]
+        clus_std = cluster_std[i]
+        ax.plot(time, clus_mean, label='Cluster {}'.format(i))
+        ax.fill_between(time, clus_mean-clus_std, clus_mean+clus_std,
+                        alpha=0.15)
+
+    plt.legend()
+
+    
 #############
 # FILTERING #
 #############
@@ -157,15 +208,16 @@ def pass_band_butter(signal, sf, low_hz=500, high_hz=9000, order=2):
 	ndarray: the filtered signal
 
     """
-    # Nyquist frequency.
-    nyq = sf / 2
+    # Nyquist frequency
+    # (highest frequency of the original signal that is not aliased).
+    nyq = sf /2
 
     # Frequency in term of Nyquist multipliers.
     low = low_hz / nyq
     high = high_hz / nyq
 
     # Calculate coefficients.
-    b, a = butter (order, [low, high], btype='band')
+    b, a = butter(order, [low, high], btype='band')
 
     # Filtered signal.
     filtered_signal = lfilter(b, a, signal)
@@ -181,7 +233,7 @@ def pass_band_butter(signal, sf, low_hz=500, high_hz=9000, order=2):
 
 
 def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
-                   max_thresh=350, spike_mode="median"):
+                   max_thresh=350, spike_mode="quiroga"):
     """Extract spike waveforms from the data and align them together.
     It is probably better to compute threshold with median, but to be verified.
 
@@ -199,9 +251,12 @@ def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
 	list: positions of the spike's maximums
         list of ndarray: each array contains a spikes' wave form.
     """
-    if spike_mode == 'median':
+    if spike_mode == 'quiroga':
         # Threshold based on median (see Quiroga 2004).
         thresh = np.median(np.abs(signal)/0.6745) * thresh_coeff
+    elif spike_mode == 'mad':
+        # Thresh based on median absolute deviation.
+        thresh = mad(signal) * thresh_coeff
     else:
         # Calculate threshold based on mean.
         thresh = np.mean(np.abs(signal)) * thresh_coeff
@@ -238,94 +293,5 @@ def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
     wave_form_list = np.array(wave_form_list)[ind_unique]
     return spike_pos, wave_form_list
 
-
-
-######################
-# FEATURE EXTRACTION #
-######################
-
-### With PCA and k-means clustering.
-
-def cluster_pca_kmeans(signals, pca_dim=12, n_clus=3):
-    """Perform a PCA for extracting the features from the spikes and then
-    cluster these features using k-means algorithm.
-
-    Args:
-        signals (list of ndarray): contains all the wave_forms to be clustered.
-        pca_dim (int): Number of dimension of the PCA. (default 12)
-        n_clus (int): Number of clusters that gather the spikes. (default 3)
-
-    Returns:
-	(dic): contains the low-dimension signal and the clusters of all spikes.
-
-    """
-
-    # Apply min-max scaling.
-    scaler = sk.preprocessing.MinMaxScaler()
-    signal_norm = scaler.fit_transform(signals)
-    # Dimensionality Reduction.    
-    pca = PCA(n_components=pca_dim)
-    signal_pca = pca.fit_transform(signals)
-    #hf.plot_pca(wave_pca)
-
-    ### K-means clustering.
-    kmeans = KMeans(n_clusters=n_clus, random_state=0)
-    #print(kmeans.cluster_centers_)
-    signal_labels = kmeans.fit_predict(signal_pca)
-    cluster_centers = kmeans.cluster_centers_
-    
-    ### Organize results.
-    result = {}
-    result['n_dim'] = pca_dim
-    result['n_clus'] = n_clus
-    result['low_dim_signal'] = signal_pca
-    result['labels'] = signal_labels
-    result['cluster_centers'] = cluster_centers
-    
-    return result
-
-
-
-def plot_features_cluster(signals, sample_freq, result_cluster):
-    """Plot the clusters on the two first dimensions of the low_dimensional
-    signal, also plot the average and std of the wave_forms of all clusters.
-
-    Args:
-        signals (list of ndarray): each arra
-        sample_freq (float): sampling_frequency
-        result_cluster (dic): result from a clusterization function
-
-    """
-    ### Extract variables from clusterization result.
-    n_clus = result_cluster['n_clus']
-    low_dim_signal = result_cluster['low_dim_signal']
-    labels = result_cluster['labels']
-    cluster_centers = result_cluster['cluster_centers']
-
-    ### Plot the clusters on the two first dimension of the low dim signal.
-    plot_pca(low_dim_signal, c_data=labels)
-
-    ### Plot the average wave_form (and std) for each cluster.
-    cluster_mean = [signals[labels==i, :].mean(axis=0) for i in range(n_clus)]
-    cluster_std = [signals[labels==0, :].std(axis=0) for i in range(n_clus)]
-
-    time = np.linspace(0, signals.shape[1]/sample_freq, signals.shape[1])*1000
-
-    fig, ax = plt.subplots(figsize=(15, 5))
-    for i in range(n_clus):
-        clus_mean = cluster_mean[i]
-        clus_std = cluster_std[i]
-        ax.plot(time, clus_mean, label='Cluster {}'.format(i))
-        ax.fill_between(time, clus_mean-clus_std, clus_mean+clus_std,
-                        alpha=0.15)
-
-    plt.legend()
-
-    
-### With Wavelets and magnetic clustering XXX.
-
-### Try all combinations of dimension reduction and clustering:
-### dim. red. : PCA, wavelets, t-sne, VAE, NMF.
-### clustering algo: k-means, SPC, DBSCAN
 
 
