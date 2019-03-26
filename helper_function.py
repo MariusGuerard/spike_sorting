@@ -39,12 +39,7 @@ def mad(arr):
 #######################
 
 def load_ncs(data_path):
-    """Load data from Neuralynx (by Carsten Klein).
-
-    Note: The ravel of the data['Samples'] might cause problems because 
-    consider that there is no pause between recordings...
-    512/sf * 1e6 = 15974 != raw[1][0] - raw[0][0] = 15872 (100 microseconds 
-    of difference is not much though so it might be negligible).
+    """Load data from Neuralynx.
 
     Args:
         data_path (str): location of the ncs file.
@@ -74,14 +69,23 @@ def load_ncs(data_path):
     # Get sampling frequency
     sf = raw['SampleFreq'][0]
     # Create data vector
-    data = raw['Samples'].ravel()
 
-    # Determine duration of recording in seconds
-    dur_sec = len(data) / sf
+    data_list = [raw['Samples'][i][:raw['NumValidSamples'][i]]
+                 for i in range(len(raw))]
 
-    # Create time vector
-    time_vec = np.linspace(0, dur_sec, len(data))
+    data = np.concatenate(data_list)
 
+    # Create time vector.
+    dt_micro = 1e6 / sf
+    start_acq = raw['TimeStamp'] - raw['TimeStamp'][0]
+    end_acq = start_acq + raw['NumValidSamples'] * dt_micro
+
+    time_vec = [np.linspace(start_acq[i], end_acq[i],
+                                raw['NumValidSamples'][i]) for i in range(len(raw))]
+
+    time_vec = np.concatenate(time_vec)
+
+    
     return raw, sf, data, time_vec
 
 
@@ -131,7 +135,7 @@ def pass_band_butter(signal, sf, low_hz=500, high_hz=9000, order=2):
 
 
 def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
-                   max_thresh=350, spike_mode="quiroga"):
+                   max_thresh=350, thresh_mode="quiroga"):
     """Extract spike waveforms from the data and align them together.
     It is probably better to compute threshold with median, but to be verified.
 
@@ -149,10 +153,10 @@ def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
 	list: positions of the spike's maximums
         list of ndarray: each array contains a spikes' wave form.
     """
-    if spike_mode == 'quiroga':
+    if thresh_mode == 'quiroga':
         # Threshold based on median (see Quiroga 2004).
         thresh = np.median(np.abs(signal)/0.6745) * thresh_coeff
-    elif spike_mode == 'mad':
+    elif thresh_mode == 'mad':
         # Thresh based on median absolute deviation.
         thresh = mad(signal) * thresh_coeff
     else:
@@ -193,3 +197,53 @@ def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
 
 
 
+#########
+# DRAFT #
+#########
+
+
+# def load_ncs(data_path):
+#     """Load data from Neuralynx (by Carsten Klein).
+
+#     Note: The ravel of the data['Samples'] might cause problems because 
+#     consider that there is no pause between recordings...
+#     512/sf * 1e6 = 15974 != raw[1][0] - raw[0][0] = 15872 (100 microseconds 
+#     of difference is not much though so it might be negligible).
+
+#     Args:
+#         data_path (str): location of the ncs file.
+
+#     Returns:
+#         ndarray: The raw data
+#         uint32: the sampling frequency
+#         ndarray: the signal amplitude
+#         ndarray: the time vector
+    
+#      """
+#     # Header has 16 kilobytes length.
+#     HEADER_SIZE = 16 * 1024
+#     # Open file.
+#     fid = open(data_path, 'rb')
+#     # Skip header by shifting position by header size.
+#     fid.seek(HEADER_SIZE)
+#     # Read data according to Neuralynx information
+#     data_format = np.dtype([('TimeStamp', np.uint64),
+#                             ('ChannelNumber', np.uint32),
+#                             ('SampleFreq', np.uint32),
+#                             ('NumValidSamples', np.uint32),
+#                             ('Samples', np.int16, 512)])
+#     raw = np.fromfile(fid, dtype=data_format)
+#     # Close file
+#     fid.close()
+#     # Get sampling frequency
+#     sf = raw['SampleFreq'][0]
+#     # Create data vector
+#     data = raw['Samples'].ravel()
+
+#     # Determine duration of recording in seconds
+#     dur_sec = len(data) / sf
+
+#     # Create time vector
+#     time_vec = np.linspace(0, dur_sec, len(data))
+
+#     return raw, sf, data, time_vec
