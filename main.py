@@ -1,17 +1,22 @@
 """
 Pipeline for Spike sorting algorithms.
+
+To do:
+-Check Why the thresholding parameter 'quiroga' gives such different results.
+
 Author: Marius Guerard
 """
 
-### For debuging.
 
 import helper_function as hf
 import feature_extraction as fe
 import visualization as vis
 
+
 ##############
 # PARAMETERS #
 ##############
+
 
 # Data path containing your Neuralynx data.
 DATA_PATH = "../UCLA_data/CSC4.Ncs"
@@ -23,6 +28,7 @@ N_CLUS = 3
 # Window of time (in seconds) to plot some samples of spikes.
 T_MIN_MAX = (0, 3)
 
+
 ########
 # MAIN #
 ########
@@ -30,11 +36,11 @@ T_MIN_MAX = (0, 3)
 
 def spike_sort(data_path=DATA_PATH, n_clus=N_CLUS, t_min_max=T_MIN_MAX):
     """First draft of the pipeline use to cluster signal amplitude into the
-    different spikes that initiated it.    
+    different spikes that initiated it.
 
     Args:
         data_path (str): path of your ncs file.
-        n_clus (int): number of cluster to be set manually for now. 
+        n_clus (int): number of cluster to be set manually for now.
         t_min_max (tuple of int): containsthe range of data to be plotted.
     """
 
@@ -47,44 +53,36 @@ def spike_sort(data_path=DATA_PATH, n_clus=N_CLUS, t_min_max=T_MIN_MAX):
 
     ### Plot the raw signal and the filtered signal between time
     ### 'T_MIN_MAX[0]' and 'T_MIN_MAX[1]'.
-    vis.plot_amplitude(time_vec, amp, sf, t_min=t_min_max[0], t_max=t_min_max[1])
-    vis.plot_amplitude(time_vec, filtered_amp, sf, t_min=t_min_max[0],
-                      t_max=t_min_max[1])
+    # vis.plot_amplitude(time_vec, amp, sf, t_min=t_min_max[0], t_max=t_min_max[1])
+    # vis.plot_amplitude(time_vec, filtered_amp, sf, t_min=t_min_max[0],
+    #                   t_max=t_min_max[1])
 
-
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
     ### Exctract spikes from filtered signal and return the position of the
     ### spikes maxima and all the wave form around these maxima.
-    pos, wave_form = hf.extract_spikes(filtered_amp, thresh_mode="mean")
+    pos, wave_form = hf.extract_spikes(filtered_amp, thresh_mode="quiroga")
 
- 
-    
-    ### Plot the spikes maximum positions.
-    # plt.vlines(time[pos], -200, 100)
     ### Plot a random subset of the spikes wave_form
-    vis.plot_random_spikes(wave_form)
+    #vis.plot_random_spikes(wave_form)
 
+    ### Extract features from spikes.
+    wave_features = fe.dwt_multimodal(wave_form, low_dim=10)
 
-    
-    
-    ### Extract features from spikes and cluster them.
-    # features_1 = fe.feat_clust(wave_form, feat_func=fe.dwt_multimodal,
-    #                            clust_type=fe.dbscan)
-    features_1 = fe.feat_clust(wave_form, feat_func=fe.dwt_multimodal)
-    
+    ### Clusterize those features.
+    features_1 = fe.k_means(wave_features, n_clus=n_clus)
+
     ### Plot the cluster map and their average wave form.
     vis.plot_features_cluster(wave_form, sf, features_1, dim=3)
 
-    
- 
-    
     return raw, pos, wave_form, features_1
+
 
 if __name__ == "__main__":
 
     raw, pos, wave_form, features_1 = spike_sort()
 
 
+    ### DRAFT
     # import matplotlib.pyplot as plt
     # import pywt
     # import numpy as np
@@ -92,7 +90,7 @@ if __name__ == "__main__":
     # from sklearn.cluster import DBSCAN
     # from sklearn.preprocessing import StandardScaler
     # from scipy import stats
-    
+
 
     # coeff_reduced = fe.dwt_multimodal(wave_form)
 
@@ -101,5 +99,3 @@ if __name__ == "__main__":
     # eps_range = np.linspace(1.6, 1.9, 10)
     # for eps_i in eps_range:
     #     dbscan_list.append(fe.dbscan(coeff_reduced, eps=eps_i))
-        
-

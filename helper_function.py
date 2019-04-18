@@ -1,14 +1,20 @@
 """
 Helper functions for spike sorting algorithms.
-Author: Marius Guerard
 
-Inspirations: 
+Inspirations:
 
 https://github.com/akcarsten/akcarsten.github.io/blob/master/spike_sorting/Spike_sorting%20.ipynb
-
 https://vis.caltech.edu/~rodri/papers/Spike_sorting.pdf
 
-XXX Check energy-efficient algorithms for comparison.
+To do:
+
+- As these algorithm might be used live and on small bio-hardware, need to
+compare the energy-efficienty of the different algorithms.
+
+- Look other filters, parameters.
+
+
+Author: Marius Guerard
 """
 import numpy as np
 from scipy.signal import butter, lfilter
@@ -20,23 +26,22 @@ plt.ion()
 # MATH #
 ########
 
-# [doc]
+
 def mad(arr):
     """ Median Absolute Deviation: a "Robust" version of standard deviation.
     Indices variabililty of the sample.
-    https://en.wikipedia.org/wiki/Median_absolute_deviation 
+    https://en.wikipedia.org/wiki/Median_absolute_deviation
     """
     # should be faster to not use masked arrays.
-    arr = np.ma.array(arr).compressed() 
+    arr = np.ma.array(arr).compressed()
     med = np.median(arr)
     return np.median(np.abs(arr - med))
-
-
 
 
 #######################
 # LOADING AND PARSING #
 #######################
+
 
 def load_ncs(data_path):
     """Load data from Neuralynx.
@@ -49,7 +54,7 @@ def load_ncs(data_path):
         uint32: the sampling frequency
         ndarray: the signal amplitude
         ndarray: the time vector
-    
+
      """
     # Header has 16 kilobytes length.
     HEADER_SIZE = 16 * 1024
@@ -64,15 +69,16 @@ def load_ncs(data_path):
                             ('NumValidSamples', np.uint32),
                             ('Samples', np.int16, 512)])
     raw = np.fromfile(fid, dtype=data_format)
+
     # Close file
     fid.close()
+
     # Get sampling frequency
     sf = raw['SampleFreq'][0]
-    # Create data vector
 
+    # Create data vector
     data_list = [raw['Samples'][i][:raw['NumValidSamples'][i]]
                  for i in range(len(raw))]
-
     data = np.concatenate(data_list)
 
     # Create time vector.
@@ -80,17 +86,15 @@ def load_ncs(data_path):
     start_acq = raw['TimeStamp'] - raw['TimeStamp'][0]
     end_acq = start_acq + raw['NumValidSamples'] * dt_micro
 
-    time_vec = [np.linspace(start_acq[i], end_acq[i],
-                                raw['NumValidSamples'][i]) for i in range(len(raw))]
+    time_vec = [np.linspace(start_acq[i],
+                            end_acq[i],
+                            raw['NumValidSamples'][i]) for i in range(len(raw))]
 
     time_vec = np.concatenate(time_vec)
 
-    
     return raw, sf, data, time_vec
 
 
-
-    
 #############
 # FILTERING #
 #############
@@ -100,15 +104,14 @@ def pass_band_butter(signal, sf, low_hz=500, high_hz=9000, order=2):
     """Implement a butter pass_band.
 
     Args:
-    signal (ndarray): the signal to be filtered.
-    sf (uint32): the sampling frequency.
-    low_hz (the lower bound of the filter in Hz (default 500)
-    high_hz (float): the higher bound of the filter in Hz (default 9000)
-    order (uint): order of the filter. (default 2)
+        signal (ndarray): the signal to be filtered.
+        sf (uint32): the sampling frequency.
+        low_hz (the lower bound of the filter in Hz (default 500)
+        high_hz (float): the higher bound of the filter in Hz (default 9000)
+        order (uint): order of the filter. (default 2)
 
     Returns:
 	ndarray: the filtered signal
-
     """
     # Nyquist frequency
     # (highest frequency of the original signal that is not aliased).
@@ -127,8 +130,6 @@ def pass_band_butter(signal, sf, low_hz=500, high_hz=9000, order=2):
     return filtered_signal
 
 
-### XXX Look other filters, parameters.
-
 ####################
 # SPIKE EXTRACTION #
 ####################
@@ -141,10 +142,10 @@ def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
 
     Args:
         signal (ndarray): signal containing spikes mixed with noise.
-        spike_window (int): number of acquisition that define a wave_form 
+        spike_window (int): number of acquisition that define a wave_form
         (default 80)
         thresh_coeff (float): ratio between threshold and noise (default 5)
-        offset (int): offset between the spike's maximum and the window center 
+        offset (int): offset between the spike's maximum and the window center
         (default 10)
         max_thresh (float): high-threshold to remove artifacts (default 350)
         spike_mode way to compute the threshold from the signal (default "median")
@@ -167,14 +168,14 @@ def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
     pos_vec = np.where(signal > thresh)[0]
     # Test of which of these position are not too close from start or end.
     pos_in_simu = (pos_vec > spike_window) * \
-                  (pos_vec < len(signal) - spike_window) 
+                  (pos_vec < len(signal) - spike_window)
     # Remove the position that are too close from start or end.
     pos_vec = pos_vec[pos_in_simu]
-    
+
     # Store the position of the maximum of the spike.
     spike_pos = []
     # Store the spike signals centered on the window.
-    wave_form_list = [] 
+    wave_form_list = []
 
     for pos in pos_vec:
         # signal in the window around where the threshold is crossed.
@@ -194,56 +195,3 @@ def extract_spikes(signal, spike_window=80, thresh_coeff=5, offset=10,
     spike_pos = np.array(spike_pos)[ind_unique]
     wave_form_list = np.array(wave_form_list)[ind_unique]
     return spike_pos, wave_form_list
-
-
-
-#########
-# DRAFT #
-#########
-
-
-# def load_ncs(data_path):
-#     """Load data from Neuralynx (by Carsten Klein).
-
-#     Note: The ravel of the data['Samples'] might cause problems because 
-#     consider that there is no pause between recordings...
-#     512/sf * 1e6 = 15974 != raw[1][0] - raw[0][0] = 15872 (100 microseconds 
-#     of difference is not much though so it might be negligible).
-
-#     Args:
-#         data_path (str): location of the ncs file.
-
-#     Returns:
-#         ndarray: The raw data
-#         uint32: the sampling frequency
-#         ndarray: the signal amplitude
-#         ndarray: the time vector
-    
-#      """
-#     # Header has 16 kilobytes length.
-#     HEADER_SIZE = 16 * 1024
-#     # Open file.
-#     fid = open(data_path, 'rb')
-#     # Skip header by shifting position by header size.
-#     fid.seek(HEADER_SIZE)
-#     # Read data according to Neuralynx information
-#     data_format = np.dtype([('TimeStamp', np.uint64),
-#                             ('ChannelNumber', np.uint32),
-#                             ('SampleFreq', np.uint32),
-#                             ('NumValidSamples', np.uint32),
-#                             ('Samples', np.int16, 512)])
-#     raw = np.fromfile(fid, dtype=data_format)
-#     # Close file
-#     fid.close()
-#     # Get sampling frequency
-#     sf = raw['SampleFreq'][0]
-#     # Create data vector
-#     data = raw['Samples'].ravel()
-
-#     # Determine duration of recording in seconds
-#     dur_sec = len(data) / sf
-
-#     # Create time vector
-#     time_vec = np.linspace(0, dur_sec, len(data))
-
-#     return raw, sf, data, time_vec

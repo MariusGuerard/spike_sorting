@@ -2,7 +2,7 @@
 Module that gather the different methods of feature extractions:
 
 For features extraction:
-- pca 
+- pca
 - wavelets + pca
 - wavelets + multimodal selection
 (- VAE)
@@ -14,12 +14,15 @@ For Clustering:
 (- DBSCAN)
 (- SPC)
 
-
+Needs to try all combinations of dimension reduction and clustering:
 
 Author: Marius Guerard
 """
 import numpy as np
 import pywt
+
+from scipy.optimize import curve_fit
+from scipy import exp
 
 import sklearn as sk
 from sklearn.decomposition import PCA
@@ -27,17 +30,13 @@ from sklearn.cluster import KMeans, DBSCAN
 from sklearn.preprocessing import StandardScaler
 
 
-from scipy import stats
-from scipy.optimize import curve_fit
-from scipy import exp
-
-
 ########
 # MATH #
 ########
 
+
 def fit_gaussian(signal, bins=100):
-    """Compute a distribution of the signal and fit a gaussian to this 
+    """Compute a distribution of the signal and fit a gaussian to this
     distribution. Then compute the inverse of the normalized distance between
     the distribution and the fitted curve. This give an indicator of normality
     as the biggest is this value, the smallest is the distance between the
@@ -70,9 +69,8 @@ def fit_gaussian(signal, bins=100):
 
     # We want small value = not normal to match p_value test.
     norm_indicator = 1 / (err2 + 1e-15)
-        
-    return popt, norm_indicator
 
+    return popt, norm_indicator
 
 
 def normal_rank(signals, norm_test=fit_gaussian):
@@ -81,8 +79,8 @@ def normal_rank(signals, norm_test=fit_gaussian):
     In this specific application, put the wavelets coefficients into signals...
 
     Note: what can you use on norm_test:
-        For Shapiro: stats.shapiro
-        For Dagostino: stats.normaltest
+        For Shapiro: scipy.stats.shapiro
+        For Dagostino: scipy.stats.normaltest
         For fitting a gaussina method on the distrib: fit_gaussian
         Also Try anderson-darling, lilifoers, dip test, KDE estimation.
 
@@ -97,9 +95,8 @@ def normal_rank(signals, norm_test=fit_gaussian):
     """
     pval_list = [norm_test(signals[:, i])[1]
                  for i in range(signals.shape[1])]
-    
-    return pval_list, np.argsort(pval_list)
 
+    return pval_list, np.argsort(pval_list)
 
 
 ############################
@@ -121,15 +118,15 @@ def pca(signals, low_dim=12):
     ### Apply min-max scaling.
     scaler = sk.preprocessing.MinMaxScaler()
     signal_norm = scaler.fit_transform(signals)
-    ### Dimensionality Reduction.    
+    ### Dimensionality Reduction.
     pca = PCA(n_components=low_dim)
-    signal_pca = pca.fit_transform(signals)
+    signal_pca = pca.fit_transform(signal_norm)
     #hf.plot_pca(wave_pca)
     return signal_pca
 
 
 def dwt_pca(signals, wavelets_level=4, low_dim=12):
-    """Perform a Discrete Wavelets Transform (DWT) and then a PCA 
+    """Perform a Discrete Wavelets Transform (DWT) and then a PCA
     on the coefficients of the DWT.
 
     Args:
@@ -138,7 +135,7 @@ def dwt_pca(signals, wavelets_level=4, low_dim=12):
         low_dim (int): Number of dimension of the PCA. (default 12)
 
     Returns:
-	(list of ndarray): the wavelets coefficients projected on the 
+	(list of ndarray): the wavelets coefficients projected on the
         'low_dim' first components.
     """
     coeffs = pywt.wavedec(signals, 'haar', level=wavelets_level)
@@ -146,9 +143,8 @@ def dwt_pca(signals, wavelets_level=4, low_dim=12):
     return pca(coeffs_concat, low_dim=low_dim)
 
 
-
 def dwt_multimodal(signals, wavelets_level=4, low_dim=12):
-    """Perform a Discrete Wavelets Transform (DWT) and then choose the 
+    """Perform a Discrete Wavelets Transform (DWT) and then choose the
     coefficients with the 'least normal' distribution in order to select
     potential multimodal distribution candidates (see Quiroga 2004).
 
@@ -158,7 +154,7 @@ def dwt_multimodal(signals, wavelets_level=4, low_dim=12):
         low_dim (int): Number of dimension to keep. (default 12)
 
     Returns:
-	(list of ndarray): the wavelets coefficients projected on the 
+	(list of ndarray): the wavelets coefficients projected on the
         'low_dim' first components.
     """
     coeffs = pywt.wavedec(signals, 'haar', level=wavelets_level)
@@ -166,9 +162,11 @@ def dwt_multimodal(signals, wavelets_level=4, low_dim=12):
     idx_least_normal = normal_rank(coeffs_concat)[1][:low_dim]
     return coeffs_concat[:, idx_least_normal]
 
+
 ##############
 # CLUSTERING #
 ##############
+
 
 def k_means(signal_low_dim, n_clus=3):
     """Clusterize the low dimension signal thanks to K-means algorithm.
@@ -185,7 +183,7 @@ def k_means(signal_low_dim, n_clus=3):
     #print(kmeans.cluster_centers_)
     signal_labels = kmeans.fit_predict(signal_low_dim)
     cluster_centers = kmeans.cluster_centers_
-    
+
     ### Organize results.
     result = {}
     result['model'] = kmeans
@@ -194,11 +192,8 @@ def k_means(signal_low_dim, n_clus=3):
     result['low_dim_signal'] = signal_low_dim
     result['labels'] = signal_labels
     result['cluster_centers'] = cluster_centers
-    
+
     return result
-
-
-
 
 
 def dbscan(signal_low_dim, eps=2., min_sample=300):
@@ -216,7 +211,7 @@ def dbscan(signal_low_dim, eps=2., min_sample=300):
     signal_norm = StandardScaler().fit_transform(signal_low_dim)
     db = DBSCAN(eps=eps, min_samples=min_sample).fit(signal_norm)
     signal_labels = db.labels_
-    
+
     ### Organize results.
     result = {}
     result['model'] = db
@@ -225,33 +220,13 @@ def dbscan(signal_low_dim, eps=2., min_sample=300):
     result['low_dim_signal'] = signal_low_dim
     result['labels'] = signal_labels
     #result['cluster_centers'] = cluster_centers
-    
+
     return result
-
-
-
-
-
-
-def feat_clust(signals, feat_func=dwt_pca, clust_type=k_means, low_dim=10):
-    low_dim_signal = feat_func(signals, low_dim=low_dim)
-    return clust_type(low_dim_signal)
-
-    
-
-### Try all combinations of dimension reduction and clustering:
-### dim. red. : PCA, wavelets, t-sne, VAE, NMF.
-### clustering algo: k-means, SPC, DBSCAN
-
-### Note: I think that even used in the cloud with computer power, these methods might be too long to be executed fast enough to be seamless. But it can still inform us on what relevant feature to look for during calibration and then just look for these relevant features.
 
 
 #########
 # DRAFT #
 #########
-
-
-
 
 # def spc(signal_low_dim):
 #     """Clusterize the low dimension signal thanks to superparamagnetic (SPC)
@@ -263,15 +238,14 @@ def feat_clust(signals, feat_func=dwt_pca, clust_type=k_means, low_dim=10):
 #     Returns:
 # 	(dic): contains the low-dimension signal and the clusters of all spikes.
 #     """
-    
+
 #     ### Organize results.
 #     result = {}
-#     result['model'] = 
+#     result['model'] =
 #     result['n_dim'] = signal_low_dim.shape[1]
 #     result['n_clus'] = n_clus
 #     result['low_dim_signal'] = signal_low_dim
 #     result['labels'] = signal_labels
 #     result['cluster_centers'] = cluster_centers
-    
-#     return result
 
+#     return result

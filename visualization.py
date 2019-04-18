@@ -2,10 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+
 ###########################
 # VISUALIZATION FUNCTIONS #
 ###########################
-     
+
+
 def plot_amplitude(time_vec, data_vec, sf, t_min=0, t_max=1):
     """Plot voltage amplitude between t_min seconds and t_max seconds.
 
@@ -35,8 +37,8 @@ def plot_random_spikes(spike_data, n_spikes=100):
     """
     np.random.seed(10)
     fig, ax = plt.subplots(figsize=(15, 5))
-    
-    for i in range(100):
+
+    for i in range(n_spikes):
         spike = np.random.randint(0, len(spike_data))
         ax.plot(spike_data[spike, :])
 
@@ -46,13 +48,12 @@ def plot_random_spikes(spike_data, n_spikes=100):
     plt.show()
 
 
-
 def plot_cluster(signal_pca, c_data=None, dim=2):
     """Scatter plot the two first columns of signal_pca
 
     Args:
         signal_pca (ndarray): the pca to be plotted
-        c_data (ndarray): the color value, 
+        c_data (ndarray): the color value,
         if None, use the 3rd columns of signal_pca (default None)
         dim (int): must be 2 for 2D plot or 3 for 3D plot
     """
@@ -70,14 +71,13 @@ def plot_cluster(signal_pca, c_data=None, dim=2):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(signal_pca[:, 0], signal_pca[:, 1], signal_pca[:, 2], c=c_data)
-        
+
     ax.set_xlabel('1st principal component', fontsize=20)
     ax.set_ylabel('2nd principal component', fontsize=20)
     fig.subplots_adjust(wspace=0.1, hspace=0.1)
     plt.show()
- 
 
-    
+
 def plot_features_cluster(signals, sample_freq, result_cluster, dim=2):
     """Plot the clusters on the two first dimensions of the low_dimensional
     signal, also plot the average and std of the wave_forms of all clusters.
@@ -111,5 +111,3 @@ def plot_features_cluster(signals, sample_freq, result_cluster, dim=2):
                         alpha=0.15)
 
     plt.legend()
-
-        
