@@ -7,16 +7,13 @@ To do:
 Author: Marius Guerard
 """
 
-
 import helper_function as hf
 import feature_extraction as fe
 import visualization as vis
 
-
 ##############
 # PARAMETERS #
 ##############
-
 
 # Data path containing your Neuralynx data.
 DATA_PATH = "../UCLA_data/CSC4.Ncs"
@@ -28,11 +25,9 @@ N_CLUS = 3
 # Window of time (in seconds) to plot some samples of spikes.
 T_MIN_MAX = (0, 3)
 
-
 ########
 # MAIN #
 ########
-
 
 def spike_sort(data_path=DATA_PATH, n_clus=N_CLUS, t_min_max=T_MIN_MAX):
     """First draft of the pipeline use to cluster signal amplitude into the

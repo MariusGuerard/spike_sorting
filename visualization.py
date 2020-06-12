@@ -57,7 +57,7 @@ def plot_cluster(signal_pca, c_data=None, dim=2):
         if None, use the 3rd columns of signal_pca (default None)
         dim (int): must be 2 for 2D plot or 3 for 3D plot
     """
-
+    fig, ax = plt.subplots(figsize=(10, 10))
     # If no color data are specified use the 3rd columns of signal_pca
     # (which represent the 3rd principal component).
     try: c_data.shape
@@ -65,25 +65,23 @@ def plot_cluster(signal_pca, c_data=None, dim=2):
 
     if dim == 2:
         # Plot the 1st principal component aginst the 2nd.
-        fig, ax = plt.subplots(figsize=(8, 8))
         ax.scatter(signal_pca[:, 0], signal_pca[:, 1], c=c_data)
     elif dim == 3:
-        fig = plt.figure()
+        # Plot the 3 first Principal components (PC).
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(signal_pca[:, 0], signal_pca[:, 1], signal_pca[:, 2], c=c_data)
 
-    ax.set_xlabel('1st principal component', fontsize=20)
-    ax.set_ylabel('2nd principal component', fontsize=20)
+    ax.set_xlabel('1st PC', fontsize=20)
+    ax.set_ylabel('2nd PC', fontsize=20)
     fig.subplots_adjust(wspace=0.1, hspace=0.1)
-    plt.show()
+    
 
-
-def plot_features_cluster(signals, sample_freq, result_cluster, dim=2):
+def plot_features_cluster(signals, sample_freq, result_cluster, dim=3):
     """Plot the clusters on the two first dimensions of the low_dimensional
     signal, also plot the average and std of the wave_forms of all clusters.
 
     Args:
-        signals (list of ndarray): each arra
+        signals (ndarray): each array
         sample_freq (float): sampling_frequency
         result_cluster (dic): result from a clusterization function
 
@@ -111,3 +109,4 @@ def plot_features_cluster(signals, sample_freq, result_cluster, dim=2):
                         alpha=0.15)
 
     plt.legend()
+    

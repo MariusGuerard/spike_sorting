@@ -47,7 +47,7 @@ def fit_gaussian(signal, bins=100):
         bins (int): number of bins used to generate the distribution (default 100)
 
     Returns:
-	(tuple of float): parameters of the fitted gaussian.
+        (tuple of float): parameters of the fitted gaussian.
         (float): indicator of normality of the signal.
 
     """
@@ -89,7 +89,7 @@ def normal_rank(signals, norm_test=fit_gaussian):
         norm_test (function): method to evaluate normality (default fit_gaussian).
 
     Returns:
-	(list of float): normality indicator for each distribution.
+        (list of float): normality indicator for each distribution.
         (list of int): distribution index ranked from least normal to most normal.
 
     """
@@ -112,7 +112,7 @@ def pca(signals, low_dim=12):
         low_dim (int): Number of dimension of the PCA. (default 12)
 
     Returns:
-	(list of ndarray): the signal projected on the 'low_dim' first components.
+        (list of ndarray): the signal projected on the 'low_dim' first components.
     """
 
     ### Apply min-max scaling.
@@ -135,7 +135,7 @@ def dwt_pca(signals, wavelets_level=4, low_dim=12):
         low_dim (int): Number of dimension of the PCA. (default 12)
 
     Returns:
-	(list of ndarray): the wavelets coefficients projected on the
+        (list of ndarray): the wavelets coefficients projected on the
         'low_dim' first components.
     """
     coeffs = pywt.wavedec(signals, 'haar', level=wavelets_level)
@@ -154,7 +154,7 @@ def dwt_multimodal(signals, wavelets_level=4, low_dim=12):
         low_dim (int): Number of dimension to keep. (default 12)
 
     Returns:
-	(list of ndarray): the wavelets coefficients projected on the
+        (list of ndarray): the wavelets coefficients projected on the
         'low_dim' first components.
     """
     coeffs = pywt.wavedec(signals, 'haar', level=wavelets_level)
@@ -176,17 +176,47 @@ def k_means(signal_low_dim, n_clus=3):
         n_clus (int): Number of clusters that gather the spikes. (default 3)
 
     Returns:
-	(dic): contains the low-dimension signal and the clusters of all spikes.
+        (dic): contains the low-dimension signal and the clusters of all spikes.
     """
     ### K-means clustering.
     kmeans = KMeans(n_clusters=n_clus, random_state=0)
-    #print(kmeans.cluster_centers_)
     signal_labels = kmeans.fit_predict(signal_low_dim)
     cluster_centers = kmeans.cluster_centers_
 
     ### Organize results.
     result = {}
     result['model'] = kmeans
+    result['n_dim'] = signal_low_dim.shape[1]
+    result['n_clus'] = n_clus
+    result['low_dim_signal'] = signal_low_dim
+    result['labels'] = signal_labels
+    result['cluster_centers'] = cluster_centers
+
+    return result
+
+
+
+from sklearn.mixture import GaussianMixture as GMM
+
+
+def gmm(signal_low_dim, n_clus=3):
+    """Clusterize the low dimension signal thanks to Gaussian Mixtures Model (GMM).
+
+    Args:
+        signal_low_dim (list of ndarray): contains the signal to be clustered.
+        n_clus (int): Number of clusters that gather the spikes. (default 3)
+
+    Returns:
+        (dic): contains the low-dimension signal and the clusters of all spikes.
+    """
+    ### GMM clustering.
+    gmm = GMM(n_components=n_clus).fit(signal_low_dim)
+    signal_labels = gmm.predict(signal_low_dim)
+    cluster_centers = gmm.means_
+
+    ### Organize results.
+    result = {}
+    result['model'] = gmm
     result['n_dim'] = signal_low_dim.shape[1]
     result['n_clus'] = n_clus
     result['low_dim_signal'] = signal_low_dim
@@ -205,7 +235,7 @@ def dbscan(signal_low_dim, eps=2., min_sample=300):
     Note: For this data eps=2, min_sample=500 works.
 
     Returns:
-	(dic): contains the low-dimension signal and the clusters of all spikes.
+        (dic): contains the low-dimension signal and the clusters of all spikes.
     """
     ### DBSCAN clustering.
     signal_norm = StandardScaler().fit_transform(signal_low_dim)
